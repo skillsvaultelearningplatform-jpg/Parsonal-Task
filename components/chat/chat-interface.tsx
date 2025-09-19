@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -151,24 +151,52 @@ export function ChatInterface() {
     }
   }
 
+  const chunkAudio = async (audioBlob: Blob): Promise<Blob[]> => {
+    const chunkSize = 5 * 1024 * 1024 // 5MB chunks
+    const chunks: Blob[] = []
+
+    if (audioBlob.size <= chunkSize) {
+      return [audioBlob]
+    }
+
+    for (let start = 0; start < audioBlob.size; start += chunkSize) {
+      const end = Math.min(start + chunkSize, audioBlob.size)
+      chunks.push(audioBlob.slice(start, end))
+    }
+
+    return chunks
+  }
+
   const processVoiceInput = async (audioBlob: Blob) => {
     setIsLoading(true)
 
     try {
-      // In a real implementation, this would:
-      // 1. Send audio to STT service (Whisper, Google Speech-to-Text, etc.)
-      // 2. Get transcribed text
-      // 3. Send to chat API
+      const audioChunks = await chunkAudio(audioBlob)
 
-      // For now, simulate voice processing
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      if (audioChunks.length > 1) {
+        toast({
+          title: "Processing large audio",
+          description: `Audio split into ${audioChunks.length} chunks for processing...`,
+        })
+      }
+
+      // Process each chunk (in a real implementation, you'd send each chunk to STT service)
+      for (let i = 0; i < audioChunks.length; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 1000)) // Simulate processing delay
+
+        if (audioChunks.length > 1) {
+          toast({
+            title: `Processing chunk ${i + 1}/${audioChunks.length}`,
+            description: "Converting speech to text...",
+          })
+        }
+      }
 
       const simulatedTranscription = language === "bn" ? "আমার আজকের কাজগুলো দেখাও" : "Show me my tasks for today"
-
       setInputMessage(simulatedTranscription)
 
       toast({
-        title: "Voice processed",
+        title: "Voice processed successfully",
         description: "Your message has been transcribed. Click send to continue.",
       })
     } catch (error) {
@@ -237,21 +265,28 @@ export function ChatInterface() {
   return (
     <div className="grid gap-6 lg:grid-cols-4">
       <div className="lg:col-span-3">
-        <Card className="h-[600px] flex flex-col">
-          <CardHeader>
+        <Card className="h-[700px] flex flex-col border-0 shadow-xl bg-gradient-to-br from-background to-muted/30">
+          <CardHeader className="border-b bg-gradient-to-r from-cyan-500/5 to-indigo-500/5">
             <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
+              <CardTitle className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-gradient-to-br from-cyan-500 to-indigo-500 text-white">
+                  <MessageSquare className="h-5 w-5" />
+                </div>
                 AI Chat & Voice Assistant
               </CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant={language === "bn" ? "default" : "outline"}>বাংলা</Badge>
+                <Badge
+                  variant={language === "bn" ? "default" : "outline"}
+                  className="bg-gradient-to-r from-cyan-500/20 to-indigo-500/20"
+                >
+                  বাংলা
+                </Badge>
                 <Badge variant={language === "en" ? "default" : "outline"}>English</Badge>
               </div>
             </div>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col p-0">
-            <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+            <ScrollArea className="flex-1 p-6" ref={scrollAreaRef}>
               <div className="space-y-4">
                 {messages.map((message) => (
                   <div
@@ -302,27 +337,53 @@ export function ChatInterface() {
               </div>
             </ScrollArea>
 
-            <div className="p-4 border-t">
-              <div className="flex gap-2">
-                <Input
-                  placeholder={language === "bn" ? "আপনার বার্তা লিখুন..." : "Type your message..."}
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && !isLoading && sendMessage()}
-                  className="flex-1"
-                  disabled={isLoading}
-                />
-                <Button
-                  onClick={toggleRecording}
-                  variant={isRecording ? "destructive" : "outline"}
-                  size="icon"
-                  disabled={isLoading}
-                >
-                  {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                </Button>
-                <Button onClick={sendMessage} size="icon" disabled={isLoading || !inputMessage.trim()}>
-                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </Button>
+            <div className="p-6 border-t bg-gradient-to-r from-muted/30 to-background">
+              <div className="space-y-4">
+                <div className="flex gap-3">
+                  <Textarea
+                    placeholder={
+                      language === "bn"
+                        ? "আপনার বার্তা লিখুন... (Enter চাপুন পাঠাতে)"
+                        : "Type your message... (Press Enter to send)"
+                    }
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault()
+                        if (!isLoading) sendMessage()
+                      }
+                    }}
+                    className="flex-1 min-h-[80px] resize-none text-base"
+                    disabled={isLoading}
+                  />
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      onClick={toggleRecording}
+                      variant={isRecording ? "destructive" : "outline"}
+                      size="icon"
+                      disabled={isLoading}
+                      className="h-12 w-12"
+                    >
+                      {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                    </Button>
+                    <Button
+                      onClick={sendMessage}
+                      size="icon"
+                      disabled={isLoading || !inputMessage.trim()}
+                      className="h-12 w-12 bg-gradient-to-br from-cyan-500 to-indigo-500 hover:from-cyan-600 hover:to-indigo-600"
+                    >
+                      {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                    </Button>
+                  </div>
+                </div>
+
+                {isRecording && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    Recording... Click the microphone again to stop
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
